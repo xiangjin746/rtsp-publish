@@ -19,9 +19,14 @@ LIBS += $$PWD/ffmpeg-4.2.1-win32-dev/lib/avformat.lib   \
 
 SOURCES += main.cpp \
     commonlooper.cpp \
-    dlog.cpp
+    dlog.cpp \
+    audiocapturer.cpp \
+    pushwork.cpp
 
 HEADERS += \
     commonlooper.h \
     mediabase.h \
-    dlog.h
+    dlog.h \
+    audiocapturer.h \
+    pushwork.h \
+    timesutil.h

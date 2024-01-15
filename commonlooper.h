@@ -8,12 +8,12 @@ class CommonLooper
 {
 public:
     CommonLooper();
-//    virtual  ~CommonLooper();
-//    virtual RET_CODE Start();   // 开启线程
-//    virtual void Stop();    // 停止线程
-//    virtual bool Running();
-//    virtual void SetRunning(bool running);
-//    virtual void Loop() = 0;
+    virtual  ~CommonLooper();
+    virtual RET_CODE Start();   // 开启线程
+    virtual void Stop();    // 停止线程
+    virtual bool Running();
+    virtual void SetRunning(bool running);
+    virtual void Loop() = 0;
 private:
     static void *trampoline(void *p);
 protected:
