@@ -1,6 +1,11 @@
 #include "audiocapturer.h"
 #include "dlog.h"
 #include "timesutil.h"
+#include "avpublishtime.h"
+
+extern "C" {
+#include <libavcodec/avcodec.h>
+}
 
 AudioCapturer::AudioCapturer(): CommonLooper()
 {
@@ -9,7 +14,12 @@ AudioCapturer::AudioCapturer(): CommonLooper()
 
 AudioCapturer::~AudioCapturer()
 {
-
+    if(pcm_buf_){
+        delete [] pcm_buf_;
+    }
+    if(pcm_fp_){
+        fclose(pcm_fp_);
+    }
 }
 
 RET_CODE AudioCapturer::Init(const Properties properties)
@@ -19,8 +29,10 @@ RET_CODE AudioCapturer::Init(const Properties properties)
     sample_rate_ =  properties.GetProperty("sample_rate",48000);
     nb_samples_ =  properties.GetProperty("nb_samples",1024);
     channels_ = properties.GetProperty("channels",2);
+    format_ = properties.GetProperty("format", AV_SAMPLE_FMT_S16);  //  2
+    byte_per_sample_  = properties.GetProperty("byte_per_sample", 2);    // 单个采样点
 
-    pcm_buf_size_ = 2 * channels_ * nb_samples_;//PCM数据使用 s16 格式，即每个样本用 16 位（即 2 字节）表示。这就是乘以 2 的原因，因为每个样本需要 2 字节的存储空间。
+    pcm_buf_size_ = byte_per_sample_ * channels_ * nb_samples_;//PCM数据使用 s16 格式，即每个样本用 16 位（即 2 字节）表示。这就是乘以 2 的原因，因为每个样本需要 2 字节的存储空间。
     pcm_buf_ =new uint8_t[pcm_buf_size_];
     if(!pcm_buf_) {
         return RET_ERR_OUTOFMEMORY;
@@ -46,7 +58,8 @@ void AudioCapturer::Loop()
         if(readPcmFile(pcm_buf_, pcm_buf_size_) == 0) {
             if(!is_first_time_) {
                 is_first_time_ = true;
-                LogInfo("is_first_time_");
+                LogInfo("%s:t%u", AVPublishTime::GetInstance()->getAInTag(),
+                        AVPublishTime::GetInstance()->getCurrenTime());
             }
             if(callback_get_pcm_){
                 callback_get_pcm_(pcm_buf_, pcm_buf_size_);

@@ -34,6 +34,7 @@ private:
     int nb_samples_ = 1024; 
     int format_ = 1;    //目前是固定了s16
     int channels_ = 2;
+    int byte_per_sample_ = 1;
 
 };
 

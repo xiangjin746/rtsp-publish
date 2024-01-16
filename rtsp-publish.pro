@@ -21,7 +21,9 @@ SOURCES += main.cpp \
     commonlooper.cpp \
     dlog.cpp \
     audiocapturer.cpp \
-    pushwork.cpp
+    pushwork.cpp \
+    avpublishtime.cpp \
+    videocapturer.cpp
 
 HEADERS += \
     commonlooper.h \
@@ -29,4 +31,6 @@ HEADERS += \
     dlog.h \
     audiocapturer.h \
     pushwork.h \
-    timesutil.h
+    timesutil.h \
+    avpublishtime.h \
+    videocapturer.h
