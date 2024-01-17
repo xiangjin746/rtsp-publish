@@ -55,7 +55,7 @@ RET_CODE PushWork::Init(const Properties &properties)
     video_capturer_ = new VideoCapturer();
     Properties vid_cap_properties;
     vid_cap_properties.SetProperty("video_test",1);
-    vid_cap_properties.SetProperty("input_yuv_name_",input_yuv_name_);
+    vid_cap_properties.SetProperty("input_yuv_name",input_yuv_name_);
     vid_cap_properties.SetProperty("x",desktop_x_);
     vid_cap_properties.SetProperty("y",desktop_y_);
     vid_cap_properties.SetProperty("width",desktop_width_);

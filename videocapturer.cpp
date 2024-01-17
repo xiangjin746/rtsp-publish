@@ -21,7 +21,7 @@ VideoCapturer::~VideoCapturer()
 RET_CODE VideoCapturer::Init(const Properties properties)
 {
     video_test_ = properties.GetProperty("video_test",0);
-    input_yuv_name_ =  properties.GetProperty("input_yuv_name_","720x480_25fps_420p.yuv");
+    input_yuv_name_ =  properties.GetProperty("input_yuv_name","720x480_25fps_420p.yuv");
 
     x_ =  properties.GetProperty("x",0);
     y_ =  properties.GetProperty("y",0);
@@ -30,11 +30,11 @@ RET_CODE VideoCapturer::Init(const Properties properties)
     pixel_format_ = properties.GetProperty("pixel_format", 0);  
     fps_  = properties.GetProperty("fps", 25);
 
-    // yuv_buf_size_ = (width_ + width_ % 2) * (height_ + height_ % 2) * 1.5; // 一帧yuv占用的字节数量
-    // yuv_buf_ = new uint8_t[yuv_buf_size_];
-    // if(!yuv_buf_) {
-    //     return RET_ERR_OUTOFMEMORY;
-    // }
+    yuv_buf_size_ = (width_ + width_ % 2) * (height_ + height_ % 2) * 1.5; // 一帧yuv占用的字节数量
+    yuv_buf_ = new uint8_t[yuv_buf_size_];
+    if(!yuv_buf_) {
+        return RET_ERR_OUTOFMEMORY;
+    }
     if(openYuvFile(input_yuv_name_.c_str()) < 0) {
         LogError("openYuvFile %s failed", input_yuv_name_.c_str());
         return RET_FAIL;
@@ -47,8 +47,6 @@ RET_CODE VideoCapturer::Init(const Properties properties)
 
 void VideoCapturer::Loop()
 {
-    yuv_buf_size_ =(width_ + width_%2)  * (height_ + height_%2) * 1.5;   // 一帧yuv占用的字节数量
-    yuv_buf_ = new uint8_t[yuv_buf_size_];
     yuv_total_duration_ = 0;
     yuv_start_time_ = TimesUtil::GetTimeMillisecond();
     LogInfo("into loop while");
@@ -76,7 +74,6 @@ void VideoCapturer::Loop()
     }
 
     LogInfo("exit loop while");
-    
 }
 
 void VideoCapturer::AddCallback(std::function<void (uint8_t *, int32_t)> callback)
@@ -86,7 +83,7 @@ void VideoCapturer::AddCallback(std::function<void (uint8_t *, int32_t)> callbac
 
 int VideoCapturer::openYuvFile(const char *file_name)
 {
-    yuv_fp_ = fopen(file_name,"r");
+    yuv_fp_ = fopen(file_name,"rb");
     if(!yuv_fp_){
         return RET_FAIL;
     }
