@@ -23,7 +23,8 @@ SOURCES += main.cpp \
     audiocapturer.cpp \
     pushwork.cpp \
     avpublishtime.cpp \
-    videocapturer.cpp
+    videocapturer.cpp \
+    aacencoder.cpp
 
 HEADERS += \
     commonlooper.h \
@@ -33,4 +34,5 @@ HEADERS += \
     pushwork.h \
     timesutil.h \
     avpublishtime.h \
-    videocapturer.h
+    videocapturer.h \
+    aacencoder.h

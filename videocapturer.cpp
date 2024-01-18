@@ -18,7 +18,7 @@ VideoCapturer::~VideoCapturer()
     }
 }
 
-RET_CODE VideoCapturer::Init(const Properties properties)
+RET_CODE VideoCapturer::Init(const Properties &properties)
 {
     video_test_ = properties.GetProperty("video_test",0);
     input_yuv_name_ =  properties.GetProperty("input_yuv_name","720x480_25fps_420p.yuv");

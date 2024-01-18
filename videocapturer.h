@@ -20,7 +20,7 @@ public:
      *          "fps", 帧数，缺省为25
      * @return
      */
-    RET_CODE Init(const Properties properties);
+    RET_CODE Init(const Properties &properties);
 
     virtual void Loop();
     void AddCallback(std::function<void(uint8_t*, int32_t)> callback);
