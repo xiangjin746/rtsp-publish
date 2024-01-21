@@ -4,6 +4,7 @@
 #include <string>
 #include "audiocapturer.h"
 #include "videocapturer.h"
+#include "aacencoder.h"
 
 extern "C" {
 #include <libavcodec/avcodec.h>
@@ -16,6 +17,7 @@ class PushWork
 {
 public:
     PushWork();
+    ~PushWork();
     RET_CODE Init(const Properties &properties);
     RET_CODE DeInit();
 private:
@@ -28,11 +30,24 @@ private:
     // 音频test模式
     int audio_test_ = 0;
     std::string input_pcm_name_;
+    uint8_t *fltp_buf_ = NULL;
+    int fltp_buf_size_ = 0;
+    FILE *pcm_s16le_fp_ = NULL;
+    FILE *aac_fp_ = NULL;
 
     // 麦克风采样属性
     int mic_sample_rate_ = 48000;
     int mic_sample_fmt_ = AV_SAMPLE_FMT_S16;
     int mic_channels_ = 2;
+
+    AACEncoder *audio_encoder_;
+    AVFrame *audio_frame_ = NULL;
+    // 音频编码参数
+    int audio_sample_rate_ = 48000;
+    int audio_bitrate_ = 128*1024;
+    int audio_channels_ = 2;
+    int audio_sample_fmt_ = AV_SAMPLE_FMT_S16; // 具体由编码器决定，从编码器读取相应的信息
+    int audio_ch_layout_;    // 由audio_channels_决定
 
     // 视频test模式
     int video_test_ = 0;

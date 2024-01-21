@@ -1,14 +1,49 @@
 #include <functional>
 #include "pushwork.h"
 #include "dlog.h"
+#include "avpublishtime.h"
 
 PushWork::PushWork()
 {
 
 }
+PushWork::~PushWork()
+{
+    // 从源头开始释放资源
+    // 先释放音频、视频捕获
+    if(audio_capturer_) {
+        delete audio_capturer_;
+    }
+
+    if(video_capturer_) {
+        delete video_capturer_;
+    }
+
+    if(audio_encoder_) {
+        delete audio_encoder_;
+    }
+
+    if(fltp_buf_) {
+        av_free(fltp_buf_);
+    }
+
+    if(audio_frame_) {
+        av_frame_free(&audio_frame_);
+    }
+
+    if(pcm_s16le_fp_) {
+        fclose(pcm_s16le_fp_);
+    }
+
+    if(aac_fp_) {
+        fclose(aac_fp_);
+    }
+}
 
 RET_CODE PushWork::Init(const Properties &properties)
 {
+    int ret = 0;
+
     // 音频test模式
     audio_test_ = properties.GetProperty("audio_test",0);
     input_pcm_name_ = properties.GetProperty("input_pcm_name", "input_48k_2ch_s16.pcm");
@@ -17,6 +52,69 @@ RET_CODE PushWork::Init(const Properties &properties)
     mic_sample_rate_ =  properties.GetProperty("mic_sample_rate", 48000);
     mic_sample_fmt_ =  properties.GetProperty("mic_sample_fmt", AV_SAMPLE_FMT_S16);
     mic_channels_=  properties.GetProperty("mic_channels", 2);
+
+    // 音频编码参数
+    audio_sample_rate_  =  properties.GetProperty("audio_sample_rate", 48000);
+    audio_bitrate_      =  properties.GetProperty("audio_bitrate",  128*1024);
+    audio_channels_     =  properties.GetProperty("audio_channels", 2);
+    audio_ch_layout_    =  av_get_default_channel_layout(audio_channels_);
+
+    // 初始化publish time
+    AVPublishTime::GetInstance()->Rest();
+
+    // 初始化AAC音频编码器，如果失败则记录错误并返回
+    audio_encoder_ = new AACEncoder();
+    if(!audio_encoder_){
+        LogError("new AACEncoder() failed");
+        return RET_FAIL;        
+    }
+
+    // 使用设置的属性初始化音频编码器，如果失败则记录错误并返回
+    // 需要什么样的采样格式是从编码器读取出来的
+    Properties aud_codec_properties;
+    aud_codec_properties.SetProperty("audio_sample_rate",audio_sample_rate_);
+    aud_codec_properties.SetProperty("audio_bitrate",audio_bitrate_);
+    aud_codec_properties.SetProperty("audio_channels",audio_channels_);
+
+    if(audio_encoder_->Init(aud_codec_properties) != RET_OK) {
+        LogError("AACEncoder  Init failed");
+    }
+
+    // 音频重采样和帧配置
+    int frame_bytes2 = 0;
+    // 默认读取出来的数据是s16的，编码器需要的是fltp, 需要做重采样
+    // 手动把s16转成fltp
+    fltp_buf_size_ = av_samples_get_buffer_size(NULL,audio_encoder_->GetChannels(),
+                                                    audio_encoder_->GetFrameSamples(),
+                                                    (enum AVSampleFormat)audio_encoder_->GetFormat(),1);
+    fltp_buf_ = (uint8_t *)av_malloc(fltp_buf_size_);
+    if(!fltp_buf_) {
+        LogError("fltp_buf_ av_malloc failed");
+        return RET_ERR_OUTOFMEMORY;
+    }
+
+    // 分配和配置一个AVFrame，用于存储转换后的FLTP音频样本
+    audio_frame_ = av_frame_alloc();
+    audio_frame_->format = audio_encoder_->GetFormat();
+    // audio_frame_->format = AV_SAMPLE_FMT_FLTP;
+    audio_frame_->nb_samples = audio_encoder_->GetFrameSamples();
+    audio_frame_->channels = audio_encoder_->GetChannels();
+    audio_frame_->channel_layout = audio_encoder_->GetChannelLayout();
+
+    // 检查计算的缓冲区大小是否与编码器需要的大小一致
+    frame_bytes2 = audio_encoder_->GetFrameBytes();
+    if(fltp_buf_size_ != frame_bytes2) {
+        LogError("frame_bytes1:%d != frame_bytes2:%d", fltp_buf_size_, frame_bytes2);
+        return RET_FAIL;
+    }
+
+    // 为音频帧分配内存缓冲区，如果失败则记录错误并返回
+    ret = av_frame_get_buffer(audio_frame_, 0);
+    if(ret < 0) {
+        LogError("audio_frame_ av_frame_get_buffer failed");
+        return RET_FAIL;
+    }
+
 
     // 设置音频捕获
     audio_capturer_ = new AudioCapturer();
@@ -70,10 +168,10 @@ RET_CODE PushWork::Init(const Properties &properties)
     video_capturer_->AddCallback(std::bind(&PushWork::YuvCallback,this,std::placeholders::_1,
                                                                         std::placeholders::_2));
 
-    if(video_capturer_->Start() != RET_OK) {
-        LogError("VideoCapturer Start failed");
-        return RET_FAIL;
-    }
+    // if(video_capturer_->Start() != RET_OK) {
+    //     LogError("VideoCapturer Start failed");
+    //     return RET_FAIL;
+    // }
 
     return RET_OK;
 }
@@ -93,9 +191,89 @@ RET_CODE PushWork::DeInit()
     }
 }
 
+// 将s16le（16位有符号小端格式）音频数据转换为fltp（浮点平面）格式
+void s16le_convert_to_fltp(short *s16le, float *fltp, int nb_samples)
+{
+    float *fltp_l = fltp;
+    float *fltp_r = fltp + nb_samples;
+
+    for (int i = 0; i < nb_samples; i++) {
+        fltp_l[i] = s16le[i * 2] / 32768.0;
+        fltp_r[i] = s16le[i * 2 + 1] / 32768.0;
+    }
+}
+
 void PushWork::PcmCallback(uint8_t *pcm, int32_t size)
 {
-    LogInfo("size:%d", size);
+    int ret = 0;
+    // 1 写入PCM数据到文件
+    if (!pcm_s16le_fp_) {
+        pcm_s16le_fp_ = fopen("push_dump_s16le.pcm", "wb");
+    }
+
+    if (pcm_s16le_fp_) {
+        fwrite(pcm, 1, size, pcm_s16le_fp_);
+        fflush(pcm_s16le_fp_);
+    }
+
+    // 2 转换PCM格式
+    s16le_convert_to_fltp((short *)pcm, (float *)fltp_buf_, audio_frame_->nb_samples);
+
+    // 3 准备音频帧
+    if(av_frame_make_writable(audio_frame_) != 0) {
+        LogError("av_frame_make_writable failed");
+        return;
+    }
+
+    ret = av_samples_fill_arrays(audio_frame_->data,
+                                audio_frame_->linesize,
+                                fltp_buf_,
+                                audio_frame_->channels,
+                                audio_frame_->nb_samples,
+                                (enum AVSampleFormat)audio_frame_->format,
+                                0);
+    if(ret < 0) {
+        LogError("av_samples_fill_arrays failed");
+        return;
+    }
+
+    // 4 音频编码
+    int64_t pts = (int64_t)AVPublishTime::GetInstance()->get_audio_pts();
+    int ptk_frame = 0;
+    RET_CODE encode_ret = RET_OK;
+    AVPacket *packet = audio_encoder_->Encode(audio_frame_, pts, 0, &ptk_frame, &encode_ret);
+    if(encode_ret == RET_OK && packet) {
+        // 5 写入AAC数据到文件
+        // 5.1初始化文件指针，用于写入AAC数据
+        if(!aac_fp_) {
+            aac_fp_ = fopen("push_dump.aac", "wb");
+            if(!aac_fp_) {
+                LogError("fopen push_dump.aac failed");
+                return;
+            }
+        }
+
+        if(aac_fp_) {
+            uint8_t adts_header[7];
+            if (audio_encoder_->GetAdtsHeader(adts_header,packet->size) != RET_OK) {
+                LogError("GetAdtsHeader failed");
+                return;
+            }
+            fwrite(adts_header, 1, sizeof(adts_header), aac_fp_);
+            fwrite(packet->data, 1, packet->size, aac_fp_);
+            fflush(aac_fp_);
+        }
+    }
+
+    // 6 处理结束与日志记录
+    LogInfo("PcmCallback pts:%ld", pts);
+    if(packet) {
+        LogInfo("PcmCallback packet->pts:%ld", packet->pts);
+        av_packet_free(&packet);
+    } else {
+        LogInfo("packet is null");
+    }
+
 }
 
 void PushWork::YuvCallback(uint8_t *yuv, int32_t size)

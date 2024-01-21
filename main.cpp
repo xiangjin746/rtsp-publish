@@ -30,6 +30,10 @@ int main()
         properties.SetProperty("mic_sample_fmt", AV_SAMPLE_FMT_S16);
         properties.SetProperty("mic_sample_rate", 48000);
         properties.SetProperty("mic_channels", 2);
+        // 音频编码属性
+        properties.SetProperty("audio_sample_rate", 48000);
+        properties.SetProperty("audio_bitrate", 64*1024);
+        properties.SetProperty("audio_channels", 2);
 
         // 视频test模式
         properties.SetProperty("video_test", 1);    // 视频测试模式
@@ -54,7 +58,7 @@ int main()
         while (true) {
             LogInfo("%d",count);
             std::this_thread::sleep_for(std::chrono::milliseconds(1000));
-            if(count++ > 5)
+            if(count++ > 10)
                 break;
         }
 
