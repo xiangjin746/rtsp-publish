@@ -89,6 +89,7 @@ AVPacket *AACEncoder::Encode(AVFrame *frame, const int64_t pts, int flush, int *
     AVPacket *packet = av_packet_alloc();
     local_ret = avcodec_receive_packet(ctx_,packet);
     if(local_ret < 0){
+        av_packet_free(&packet);
         *pkt_frame = 0;
         if(local_ret == AVERROR(EAGAIN)){
             *ret = RET_ERR_EAGAIN;

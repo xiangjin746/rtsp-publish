@@ -46,8 +46,8 @@ int main()
         properties.SetProperty("desktop_pixel_format", AV_PIX_FMT_YUV420P);
         properties.SetProperty("desktop_fps", 15);
         
-        // // 视频编码属性
-        // properties.SetProperty("video_bitrate", 512*1024);  // 设置码率
+        // 视频编码属性
+        properties.SetProperty("video_bitrate", 512*1024);  // 设置码率
 
         if(push_work.Init(properties) != RET_OK) {
             LogError("PushWork init failed");

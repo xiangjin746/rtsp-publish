@@ -38,12 +38,18 @@ PushWork::~PushWork()
     if(aac_fp_) {
         fclose(aac_fp_);
     }
+
+    if(video_encoder_) {
+        delete video_encoder_;
+    }
+    LogInfo("~PushWork()");
 }
 
 RET_CODE PushWork::Init(const Properties &properties)
 {
     int ret = 0;
 
+    /*================================AUDIO===============================================*/
     // 音频test模式
     audio_test_ = properties.GetProperty("audio_test",0);
     input_pcm_name_ = properties.GetProperty("input_pcm_name", "input_48k_2ch_s16.pcm");
@@ -132,11 +138,12 @@ RET_CODE PushWork::Init(const Properties &properties)
     audio_capturer_->AddCallback(std::bind(&PushWork::PcmCallback,this,std::placeholders::_1,
                                                                         std::placeholders::_2));
 
-    if(audio_capturer_->Start() != RET_OK) {
-        LogError("AudioCapturer Start failed");
-        return RET_FAIL;
-    }
+    // if(audio_capturer_->Start() != RET_OK) {
+    //     LogError("AudioCapturer Start failed");
+    //     return RET_FAIL;
+    // }
 
+    /*================================VIDEO===============================================*/
     // 视频test模式
     video_test_ = properties.GetProperty("video_test",0);
     input_yuv_name_ = properties.GetProperty("input_yuv_name", "720x480_25fps_420p.yuv");
@@ -148,6 +155,29 @@ RET_CODE PushWork::Init(const Properties &properties)
     desktop_height_ = properties.GetProperty("desktop_height", 1080);
     desktop_format_ = properties.GetProperty("desktop_pixel_format", AV_PIX_FMT_YUV420P);
     desktop_fps_ = properties.GetProperty("desktop_fps", 25);
+
+    // 视频编码属性
+    video_width_  = properties.GetProperty("video_width", desktop_width_);     // 宽
+    video_height_ = properties.GetProperty("video_height", desktop_height_);   // 高
+    video_fps_ = properties.GetProperty("video_fps", desktop_fps_);             // 帧率
+    video_gop_ = properties.GetProperty("video_gop", video_fps_);
+    video_bitrate_ = properties.GetProperty("video_bitrate", 1024*1024);   // 先默认1M fixedme
+    video_b_frames_ = properties.GetProperty("video_b_frames", 0);   // b帧数量
+
+    // 初始化视频编码器
+    video_encoder_ = new H264Encoder();
+    Properties  vid_codec_properties;
+    vid_codec_properties.SetProperty("width", video_width_);
+    vid_codec_properties.SetProperty("height", video_height_);
+    vid_codec_properties.SetProperty("fps", video_fps_);            // 帧率
+    vid_codec_properties.SetProperty("b_frames", video_b_frames_);
+    vid_codec_properties.SetProperty("bitrate", video_bitrate_);    // 码率
+    vid_codec_properties.SetProperty("gop", video_gop_);            // gop
+    if(video_encoder_->Init(vid_codec_properties) != RET_OK)
+    {
+        LogError("H264Encoder Init failed");
+        return RET_FAIL;
+    }
 
     // 设置视频捕获
     video_capturer_ = new VideoCapturer();
@@ -168,10 +198,10 @@ RET_CODE PushWork::Init(const Properties &properties)
     video_capturer_->AddCallback(std::bind(&PushWork::YuvCallback,this,std::placeholders::_1,
                                                                         std::placeholders::_2));
 
-    // if(video_capturer_->Start() != RET_OK) {
-    //     LogError("VideoCapturer Start failed");
-    //     return RET_FAIL;
-    // }
+    if(video_capturer_->Start() != RET_OK) {
+        LogError("VideoCapturer Start failed");
+        return RET_FAIL;
+    }
 
     return RET_OK;
 }
@@ -278,5 +308,41 @@ void PushWork::PcmCallback(uint8_t *pcm, int32_t size)
 
 void PushWork::YuvCallback(uint8_t *yuv, int32_t size)
 {
+    
+    // 步骤1.1: 获取当前音频的演示时间戳（PTS）
+    int64_t pts = (int64_t)AVPublishTime::GetInstance()->get_audio_pts();
+    // 步骤2.1: 初始化编码过程中需要的变量
+    int pkt_frame = 0;
+    RET_CODE encode_ret = RET_OK;
+    // 步骤2.2: 将YUV格式的数据编码为视频编码包
+    AVPacket *packet =video_encoder_->Encode(yuv,size,pts,&pkt_frame,&encode_ret);    
+    if(packet){     // 步骤3.1: 检查编码后的数据包是否存在
+        // 步骤3.2: 如果文件指针为空，打开文件并写入SPS和PPS数据
+        if(!h264_fp_) {
+            h264_fp_ = fopen("push_dump.h264", "wb");
+            if(!h264_fp_) {
+                LogError("fopen push_dump.aac failed");
+                return;
+            }
+        }
+        // 步骤3.3: 写入SPS和PPS数据到文件
+        uint8_t start_code[4] = {0, 0, 0, 1};
+        fwrite(start_code, 1, 4, h264_fp_);
+        fwrite(video_encoder_->get_sps_data(), 1, video_encoder_->get_sps_size(), h264_fp_);
+        fwrite(start_code, 1, 4, h264_fp_);
+        fwrite(video_encoder_->get_pps_data(), 1, video_encoder_->get_pps_size(), h264_fp_);
+
+        // 步骤3.4: 将编码后的视频数据写入文件
+        fwrite(packet->data, 1, packet->size, h264_fp_);
+        fflush(h264_fp_);
+    }
+
+    // 步骤3.5: 记录日志并释放资源
     LogInfo("size:%d", size);
+    if(packet) {
+        LogInfo("YuvCallback packet->pts:%ld", packet->pts);
+        av_packet_free(&packet);
+    }else {
+        LogInfo("packet is null");
+    }
 }
