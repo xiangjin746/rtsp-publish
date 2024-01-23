@@ -72,6 +72,21 @@ RET_CODE H264Encoder::Init(const Properties &properties)
     ctx_->codec_type = AVMEDIA_TYPE_VIDEO;
     ctx_->max_b_frames = b_frames_;
 
+    av_dict_set(&dict_, "preset", "medium", 0);
+    av_dict_set(&dict_, "tune", "zerolatency", 0);
+    av_dict_set(&dict_, "profile", "high", 0);
+
+    ctx_->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
+
+    // 初始化音视频编码器
+    ret = (RET_CODE)avcodec_open2(ctx_, codec_, &dict_);
+    if(ret < 0) {
+        char buf[1024] = { 0 };
+        av_strerror(ret, buf, sizeof(buf) - 1);
+        LogError("avcodec_open2 failed:%s", buf);
+        return RET_FAIL;
+    }
+
     // 4.从extradata读取SPS和PPS
     if(ctx_->extradata) {// 检查extradata是否存在
         uint8_t *sps = ctx_->extradata + 4;// 定位SPS
