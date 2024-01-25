@@ -23,6 +23,12 @@ enum RET_CODE
     RET_ERR_EOF
 };
 
+typedef enum media_type {
+    E_MEDIA_UNKNOWN = -1,
+    E_AUDIO_TYPE,
+    E_VIDEO_TYPE
+}MediaType;
+
 class Properties: public std::map<std::string,std::string>
 {
 public:

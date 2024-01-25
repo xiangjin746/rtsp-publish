@@ -37,4 +37,5 @@ HEADERS += \
     avpublishtime.h \
     videocapturer.h \
     aacencoder.h \
-    h264encoder.h
+    h264encoder.h \
+    packetqueue.h
