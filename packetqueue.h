@@ -1,0 +1,4 @@
+#ifndef PACKETQUEUE_H
+#define PACKETQUEUE_H
+
+#endif // PACKETQUEUE_H
