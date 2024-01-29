@@ -13,6 +13,8 @@ extern "C" {
 
 using namespace std;
 
+#define RTSP_URL "rtsp://192.168.2.132/live/livestream"
+
 int main()
 {
     cout << "Hello World!" << endl;
@@ -49,6 +51,8 @@ int main()
         // 视频编码属性
         properties.SetProperty("video_bitrate", 512*1024);  // 设置码率
 
+        properties.SetProperty("rtsp_url", RTSP_URL);
+        properties.SetProperty("rtsp_trantport", "udp");
         if(push_work.Init(properties) != RET_OK) {
             LogError("PushWork init failed");
             return -1;

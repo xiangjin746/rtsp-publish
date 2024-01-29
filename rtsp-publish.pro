@@ -25,7 +25,8 @@ SOURCES += main.cpp \
     avpublishtime.cpp \
     videocapturer.cpp \
     aacencoder.cpp \
-    h264encoder.cpp
+    h264encoder.cpp \
+    rtsppusher.cpp
 
 HEADERS += \
     commonlooper.h \
@@ -38,4 +39,5 @@ HEADERS += \
     videocapturer.h \
     aacencoder.h \
     h264encoder.h \
-    packetqueue.h
+    packetqueue.h \
+    rtsppusher.h

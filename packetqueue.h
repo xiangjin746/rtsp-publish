@@ -1,7 +1,7 @@
 #ifndef PACKETQUEUE_H
 #define PACKETQUEUE_H
 
-#endif // PACKETQUEUE_H
+
 
 #include <mutex>
 #include <condition_variable>
@@ -35,9 +35,17 @@ public:
         audio_frame_duration_(audio_frame_duration),
         video_frame_duration_(video_frame_duration)
     {
+        if(audio_frame_duration_ < 0){
+            audio_frame_duration_ = 0;
+        }
+        if(video_frame_duration_ < 0){
+            video_frame_duration_ = 0;
+        }
         memset(&stats_, 0, sizeof(PacketQueueStats));
     }
-    ~PacketQueue();
+    ~PacketQueue(){
+
+    }
 
     // 数据包的入队操作 - Push 方法
     int Push(AVPacket *pkt,MediaType media_type) {
@@ -93,10 +101,11 @@ public:
 
         // 步骤 4: 将处理好的包加入队列
         queue_.push(mypkt);
+        return 0;
     }
 
     //  数据包的出队操作 - Pop 和 PopWithTimeout 方法
-    int Pop(AVPacket **pkt,MediaType *media_type) {
+    int Pop(AVPacket **pkt,MediaType &media_type) {
         // 步骤 1: 参数检查和锁定互斥量
         if(!pkt) {
             LogError("pkt is null");
@@ -121,20 +130,20 @@ public:
 
         // 步骤 3: 处理队列中的数据包
         MyAVPacket *mypkt = queue_.front();
-        *pkt        = mypkt->pkt;
+        *pkt        = mypkt->packet;
         media_type  = mypkt->media_type;
 
         if(media_type == E_AUDIO_TYPE) {
             stats_.audio_nb_packets--;
-            stats_.audio_size -= mypkt->pkt->size;
-            audio_front_pts_ = mypkt->pkt->pts;
+            stats_.audio_size -= mypkt->packet->size;
+            audio_front_pts_ = mypkt->packet->pts;
         }
         if(media_type == E_VIDEO_TYPE) {
             stats_.video_nb_packets--;
-            stats_.video_size -= mypkt->pkt->size;
-            video_front_pts_ = mypkt->pkt->pts;
+            stats_.video_size -= mypkt->packet->size;
+            video_front_pts_ = mypkt->packet->pts;
         }
-        av_packet_free(&mypkt->pkt);
+        av_packet_free(&mypkt->packet);
         queue_.pop();
         free(mypkt);
         return 0;
@@ -170,23 +179,23 @@ public:
 
         // 步骤 3: 从队列中取出数据包并更新统计信息
         MyAVPacket *mypkt = queue_.front(); // 读取队列首部元素
-        *pkt        = mypkt->pkt;
+        *pkt        = mypkt->packet;
         media_type  = mypkt->media_type;
 
         // 根据媒体类型更新统计信息
         if(E_AUDIO_TYPE == media_type) {
             stats_.audio_nb_packets--;      // 减少音频包计数
-            stats_.audio_size -= mypkt->pkt->size;
-            audio_front_pts_ = mypkt->pkt->pts;
+            stats_.audio_size -= mypkt->packet->size;
+            audio_front_pts_ = mypkt->packet->pts;
         }
         if(E_VIDEO_TYPE == media_type) {
             stats_.video_nb_packets--;      // 减少视频包计数
-            stats_.video_size -= mypkt->pkt->size;
-            video_front_pts_ = mypkt->pkt->pts;
+            stats_.video_size -= mypkt->packet->size;
+            video_front_pts_ = mypkt->packet->pts;
         }
 
         // 移除队列首部元素并释放内存
-        av_packet_free(&mypkt->pkt);
+        av_packet_free(&mypkt->packet);
         queue_.pop();
         free(mypkt);
 
@@ -214,7 +223,7 @@ public:
         while (!queue_.empty()) {
             MyAVPacket *mypkt = queue_.front();
             // 步骤 2: 处理非“全部删除”情况
-            if (!all && mypkt->media_type == E_VIDEO_TYPE && (mypkt->pkt->flags & AV_PKT_FLAG_KEY))
+            if (!all && mypkt->media_type == E_VIDEO_TYPE && (mypkt->packet->flags & AV_PKT_FLAG_KEY))
             {
                 int64_t duration = video_back_pts_ - video_front_pts_; // 以 pts 为准计算持续时间
 
@@ -232,17 +241,17 @@ public:
             // 步骤 3: 更新统计信息并删除数据包
             if(E_AUDIO_TYPE == mypkt->media_type) {
                 stats_.audio_nb_packets--;      // 减少音频包计数
-                stats_.audio_size -= mypkt->pkt->size;
-                audio_front_pts_ = mypkt->pkt->pts;
+                stats_.audio_size -= mypkt->packet->size;
+                audio_front_pts_ = mypkt->packet->pts;
             }
             if(E_VIDEO_TYPE == mypkt->media_type) {
                 stats_.video_nb_packets--;      // 减少视频包计数
-                stats_.video_size -= mypkt->pkt->size;
-                video_front_pts_ = mypkt->pkt->pts;
+                stats_.video_size -= mypkt->packet->size;
+                video_front_pts_ = mypkt->packet->pts;
             }
 
             // 释放 AVPacket
-            av_packet_free(&mypkt->pkt);
+            av_packet_free(&mypkt->packet);
             // 从队列中移除并释放 MyAVPacket
             queue_.pop();
             free(mypkt);
@@ -327,4 +336,8 @@ private:
     int64_t audio_back_pts_ = 0;
     int64_t video_front_pts_ = 0;
     int64_t video_back_pts_ = 0;
-}
+};
+
+
+
+#endif // PACKETQUEUE_H
