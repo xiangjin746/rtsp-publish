@@ -42,6 +42,10 @@ PushWork::~PushWork()
     if(video_encoder_) {
         delete video_encoder_;
     }
+
+    if(rtsp_pusher_) {
+        delete rtsp_pusher_;
+    }
     LogInfo("~PushWork()");
 }
 
@@ -121,28 +125,6 @@ RET_CODE PushWork::Init(const Properties &properties)
         return RET_FAIL;
     }
 
-
-    // 设置音频捕获
-    audio_capturer_ = new AudioCapturer();
-    Properties aud_cap_properties;
-    aud_cap_properties.SetProperty("audio_test",1);
-    aud_cap_properties.SetProperty("input_pcm_name",input_pcm_name_);
-    aud_cap_properties.SetProperty("sample_rate",48000);
-    aud_cap_properties.SetProperty("nb_samples",1024);
-    aud_cap_properties.SetProperty("channels",2);
-    if(audio_capturer_->Init(aud_cap_properties) != RET_OK) {
-        LogError("AudioCapturer Init failed");
-        return RET_FAIL;
-    }
-
-    audio_capturer_->AddCallback(std::bind(&PushWork::PcmCallback,this,std::placeholders::_1,
-                                                                        std::placeholders::_2));
-
-    // if(audio_capturer_->Start() != RET_OK) {
-    //     LogError("AudioCapturer Start failed");
-    //     return RET_FAIL;
-    // }
-
     /*================================VIDEO===============================================*/
     // 视频test模式
     video_test_ = properties.GetProperty("video_test",0);
@@ -176,6 +158,59 @@ RET_CODE PushWork::Init(const Properties &properties)
     if(video_encoder_->Init(vid_codec_properties) != RET_OK)
     {
         LogError("H264Encoder Init failed");
+        return RET_FAIL;
+    }
+
+    /*================================rtsp===============================================*/
+    rtsp_url_       = properties.GetProperty("rtsp_url", "");
+    rtsp_transport_ = properties.GetProperty("rtsp_transport", "");
+    rtsp_pusher_    = new RtspPusher();
+    Properties rtsp_properties;
+    rtsp_properties.SetProperty("rtsp_url",rtsp_url_);
+    rtsp_properties.SetProperty("rtsp_transport",rtsp_transport_);
+    if(rtsp_pusher_->Init(rtsp_properties) != RET_OK)
+    {
+        LogError("rtsp_pusher_ Init failed");
+        return RET_FAIL;
+    }
+    // 创建音频流、音视频流
+    if (audio_encoder_) {
+        if (rtsp_pusher_->ConfigAudioStream(audio_encoder_->get_codec_context()) != RET_OK) {
+            LogError("rtsp_pusher ConfigAudioStream failed");
+            return RET_FAIL;
+        }
+    }
+    if (video_encoder_) {
+        if (rtsp_pusher_->ConfigVideoStream(video_encoder_->get_codec_context()) != RET_OK) {
+            LogError("rtsp_pusher ConfigAudioStream failed");
+            return RET_FAIL;
+        }
+    }
+    if(rtsp_pusher_->Connect() != RET_OK) {
+        LogError("rtsp_pusher Connect() failed");
+        return RET_FAIL;
+    }
+
+    /*================================start===============================================*/
+
+    // 设置音频捕获
+    audio_capturer_ = new AudioCapturer();
+    Properties aud_cap_properties;
+    aud_cap_properties.SetProperty("audio_test",1);
+    aud_cap_properties.SetProperty("input_pcm_name",input_pcm_name_);
+    aud_cap_properties.SetProperty("sample_rate",48000);
+    aud_cap_properties.SetProperty("nb_samples",1024);
+    aud_cap_properties.SetProperty("channels",2);
+    if(audio_capturer_->Init(aud_cap_properties) != RET_OK) {
+        LogError("AudioCapturer Init failed");
+        return RET_FAIL;
+    }
+
+    audio_capturer_->AddCallback(std::bind(&PushWork::PcmCallback,this,std::placeholders::_1,
+                                                                        std::placeholders::_2));
+
+    if(audio_capturer_->Start() != RET_OK) {
+        LogError("AudioCapturer Start failed");
         return RET_FAIL;
     }
 
@@ -219,6 +254,7 @@ RET_CODE PushWork::DeInit()
         delete video_capturer_;
         video_capturer_ = NULL;
     }
+    return RET_OK;
 }
 
 // 将s16le（16位有符号小端格式）音频数据转换为fltp（浮点平面）格式
@@ -296,10 +332,11 @@ void PushWork::PcmCallback(uint8_t *pcm, int32_t size)
     }
 
     // 6 处理结束与日志记录
-    LogInfo("PcmCallback pts:%ld", pts);
+    // LogInfo("PcmCallback pts:%ld", pts);
     if(packet) {
         LogInfo("PcmCallback packet->pts:%ld", packet->pts);
-        av_packet_free(&packet);
+        // av_packet_free(&packet);
+        rtsp_pusher_->Push(packet,E_AUDIO_TYPE);
     } else {
         LogInfo("packet is null");
     }
@@ -338,10 +375,10 @@ void PushWork::YuvCallback(uint8_t *yuv, int32_t size)
     }
 
     // 步骤3.5: 记录日志并释放资源
-    LogInfo("size:%d", size);
+    // LogInfo("size:%d", size);
     if(packet) {
         LogInfo("YuvCallback packet->pts:%ld", packet->pts);
-        av_packet_free(&packet);
+         rtsp_pusher_->Push(packet,E_VIDEO_TYPE);
     }else {
         LogInfo("packet is null");
     }

@@ -31,6 +31,9 @@ public:
     inline int get_pps_size(){
         return pps_.size();
     }
+    inline AVCodecContext *get_codec_context() { 
+        return ctx_;
+    }
 private:
     int width_;
     int height_;

@@ -6,6 +6,7 @@
 #include "videocapturer.h"
 #include "aacencoder.h"
 #include "h264encoder.h"
+#include "rtsppusher.h"
 
 extern "C" {
 #include <libavcodec/avcodec.h>
@@ -76,6 +77,10 @@ private:
     FILE *h264_fp_ = NULL;
     AVFrame *audio_frame_ = NULL;
 
+    // rtsp
+    std::string rtsp_url_;
+    std::string rtsp_transport_ = "";
+    RtspPusher *rtsp_pusher_ = NULL;
 
 };
 

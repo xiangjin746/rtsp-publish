@@ -14,7 +14,7 @@ RtspPusher::~RtspPusher()
 RET_CODE RtspPusher::Init(const Properties &properties)
 {
     // Step 1: 从属性集合中获取必要的参数值
-    url_                    = properties.GetProperty("url","");
+    url_                    = properties.GetProperty("rtsp_url","");
     rtsp_transport_         = properties.GetProperty("rtsp_transport","");
     audio_frame_duration_   = properties.GetProperty("audio_frame_duration",0);
     video_frame_duration_   = properties.GetProperty("video_frame_duration",0);
@@ -214,6 +214,14 @@ void RtspPusher::Loop()
             }
         }
     }
+    ret = av_write_trailer(fmt_ctx_);
+    if(ret < 0) {
+        char str_error[512] = {0};
+        av_strerror(ret, str_error, sizeof(str_error) -1);
+        LogError("av_write_trailer failed:%s", str_error);
+        return;
+    }
+    LogInfo("avformat_write_header ok");
 }
 
 int RtspPusher::sendPacket(AVPacket *pkt, MediaType media_type)
