@@ -143,7 +143,7 @@ public:
             stats_.video_size -= mypkt->packet->size;
             video_front_pts_ = mypkt->packet->pts;
         }
-        av_packet_free(&mypkt->packet);
+        
         queue_.pop();
         free(mypkt);
         return 0;
@@ -195,7 +195,6 @@ public:
         }
 
         // 移除队列首部元素并释放内存
-        av_packet_free(&mypkt->packet);
         queue_.pop();
         free(mypkt);
 
