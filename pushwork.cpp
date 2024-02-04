@@ -164,10 +164,12 @@ RET_CODE PushWork::Init(const Properties &properties)
     /*================================rtsp===============================================*/
     rtsp_url_       = properties.GetProperty("rtsp_url", "");
     rtsp_transport_ = properties.GetProperty("rtsp_transport", "");
+    rtsp_timeout_   = properties.GetProperty("rtsp_timeout",5000);
     rtsp_pusher_    = new RtspPusher();
     Properties rtsp_properties;
     rtsp_properties.SetProperty("rtsp_url",rtsp_url_);
     rtsp_properties.SetProperty("rtsp_transport",rtsp_transport_);
+    rtsp_properties.SetProperty("rtsp_timeout",rtsp_timeout_);
     if(rtsp_pusher_->Init(rtsp_properties) != RET_OK)
     {
         LogError("rtsp_pusher_ Init failed");

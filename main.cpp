@@ -53,6 +53,7 @@ int main()
 
         properties.SetProperty("rtsp_url", RTSP_URL);
         properties.SetProperty("rtsp_transport", "udp");
+        properties.SetProperty("rtsp_timeout", 10000);
         if(push_work.Init(properties) != RET_OK) {
             LogError("PushWork init failed");
             return -1;

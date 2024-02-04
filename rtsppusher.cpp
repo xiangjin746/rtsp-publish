@@ -1,4 +1,5 @@
 #include "rtsppusher.h"
+#include "timesutil.h"
 #include "dlog.h"
 
 RtspPusher::RtspPusher()
@@ -11,11 +12,29 @@ RtspPusher::~RtspPusher()
     DeInit();
 }
 
+static int decode_interrupt_cb(void *ctx) {
+    // 设置超时时间，比如10秒
+    RtspPusher *pusher = (RtspPusher *)ctx;
+
+    // 检查当前时间是否已超过开始时间加上超时时间
+    if (pusher->IsTimeout()) {
+        // 如果超过了超时时间，返回1表示中断处理
+        LogWarn("timeout:%dms", pusher->GetTimeout());
+        return 1;
+    }
+
+    // 没有超时，返回0表示继续处理
+    LogInfo("block time:%lld", pusher->GetBlockTime());
+    return 0;
+}
+
+
 RET_CODE RtspPusher::Init(const Properties &properties)
 {
     // Step 1: 从属性集合中获取必要的参数值
     url_                    = properties.GetProperty("rtsp_url","");
     rtsp_transport_         = properties.GetProperty("rtsp_transport","");
+    rtsp_timeout_           = properties.GetProperty("rtsp_timeout",5000);
     audio_frame_duration_   = properties.GetProperty("audio_frame_duration",0);
     video_frame_duration_   = properties.GetProperty("video_frame_duration",0);
 
@@ -61,6 +80,9 @@ RET_CODE RtspPusher::Init(const Properties &properties)
         LogError("new PacketQueue failed");
         return RET_ERR_OUTOFMEMORY;
     }
+
+    fmt_ctx_->interrupt_callback.callback = decode_interrupt_cb;
+    fmt_ctx_->interrupt_callback.opaque = this;
     return RET_OK;
 }
 
@@ -96,6 +118,7 @@ RET_CODE RtspPusher::Connect()
         return RET_FAIL;
     }
     // 连接服务器
+    RestTimeout();
     int ret = avformat_write_header(fmt_ctx_, NULL);
     if(ret < 0) {
         char str_error[512] = {0};
@@ -221,6 +244,8 @@ void RtspPusher::Loop()
         LogError("av_write_trailer failed:%s", str_error);
         return;
     }
+
+    RestTimeout();
     LogInfo("avformat_write_header ok");
 }
 
@@ -249,6 +274,28 @@ int RtspPusher::sendPacket(AVPacket *pkt, MediaType media_type)
         LogError("av_opt_set failed:%s", str_error);
         return -1;
     }
-
+    
+    RestTimeout();
     return 0;
+}
+
+//超时处理
+bool RtspPusher::IsTimeout(){
+    if(TimesUtil::GetTimeMillisecond() - pre_time_ > rtsp_timeout_) {
+        return true;
+    }
+    return false;
+}
+
+//调用的地方就三个，1.初始化时，2.退出时，3.发一个包结束后
+void RtspPusher::RestTimeout() {
+    pre_time_ = TimesUtil::GetTimeMillisecond();
+}
+
+int RtspPusher::GetTimeout() {
+    return rtsp_timeout_;
+}
+
+int64_t RtspPusher::GetBlockTime() {
+    return TimesUtil::GetTimeMillisecond() - pre_time_;
 }

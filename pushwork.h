@@ -80,6 +80,7 @@ private:
     // rtsp
     std::string rtsp_url_;
     std::string rtsp_transport_ = "";
+    int rtsp_timeout_ = 5000;
     RtspPusher *rtsp_pusher_ = NULL;
 
 };

@@ -28,6 +28,12 @@ public:
     // 如果有音频成分
     RET_CODE ConfigAudioStream(const AVCodecContext *ctx);
     virtual void Loop();
+
+    //超时处理
+    bool IsTimeout();
+    void RestTimeout();
+    int GetTimeout();
+    int64_t GetBlockTime();
 private:
     int sendPacket(AVPacket *pkt, MediaType media_type);
     // 整个输出流的上下文
@@ -45,6 +51,8 @@ private:
 
     std::string url_ = "";
     std::string rtsp_transport_ = "";
+    int rtsp_timeout_ = 5000;
+    int64_t pre_time_;
 
     double audio_frame_duration_ = 23.21995649; // 默认23.2ms 44.1khz  1024*1000ms/44100=23.21995649ms
     double video_frame_duration_ = 40;  // 40ms 视频帧率为25的  ， 1000ms/25=40ms
