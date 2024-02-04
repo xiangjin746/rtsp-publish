@@ -2,7 +2,8 @@
 #include "timesutil.h"
 #include "dlog.h"
 
-RtspPusher::RtspPusher()
+RtspPusher::RtspPusher( MessageQueue *msg_queue)
+    :msg_queue_(msg_queue)
 {
     LogInfo("RtspPusher create");
 }
@@ -24,7 +25,7 @@ static int decode_interrupt_cb(void *ctx) {
     }
 
     // 没有超时，返回0表示继续处理
-    LogInfo("block time:%lld", pusher->GetBlockTime());
+    // LogInfo("block time:%lld", pusher->GetBlockTime());
     return 0;
 }
 
@@ -35,6 +36,7 @@ RET_CODE RtspPusher::Init(const Properties &properties)
     url_                    = properties.GetProperty("rtsp_url","");
     rtsp_transport_         = properties.GetProperty("rtsp_transport","");
     rtsp_timeout_           = properties.GetProperty("rtsp_timeout",5000);
+    max_queue_duration_     = properties.GetProperty("rtsp_max_queue_duration",1000);
     audio_frame_duration_   = properties.GetProperty("audio_frame_duration",0);
     video_frame_duration_   = properties.GetProperty("video_frame_duration",0);
 
@@ -205,13 +207,22 @@ void RtspPusher::Loop()
     AVPacket *pkt = NULL;
     MediaType media_type;
 
+    // LogInfo("sleep_for into");
+    // std::this_thread::sleep_for(std::chrono::seconds(10));  //人为制造延迟
+    // LogInfo("sleep_for leave");
+
     while (true) {
         if(request_abort_) {
             LogInfo("abort request");
             break;
         }
-        ret = queue_->PopWithTimeout(&pkt, media_type, 2000);
-        if(0 == ret) {
+
+        debugQueue(debug_interval_);
+        checkPacketQueueDuration();
+        // std::this_thread::sleep_for(std::chrono::milliseconds(100));  //人为制造延迟
+
+        ret = queue_->PopWithTimeout(&pkt, media_type, 1000);
+        if(1 == ret) {
             switch (media_type) {
                 if(request_abort_) {
                     LogInfo("abort request");
@@ -246,8 +257,44 @@ void RtspPusher::Loop()
     }
 
     RestTimeout();
-    LogInfo("avformat_write_header ok");
+    LogInfo("av_write_trailer ok");
 }
+
+// 按时间间隔打印packetqueue的状况
+void RtspPusher::debugQueue(int64_t interval)
+{
+    // 获取当前系统的毫秒级时间，用于比较时间间隔
+    int64_t cur_time = TimesUtil::GetTimeMillisecond();
+    // 如果当前时间与上一次调试打印时间的差值大于指定的时间间隔，则执行打印逻辑
+    if(cur_time - pre_debug_time_ > interval) { 
+        // 获取音视频队列的状态，包括音视频的持续时间
+        PacketQueueStats stats;
+        queue_->GetStats(&stats);
+        // 打印音视频队列持续时间的调试信息
+        LogInfo("duration:a=%lldms, v=%lldms", stats.audio_duration, stats.video_duration);
+        // 更新上一次调试打印的时间为当前时间，为下一次打印准备
+        pre_debug_time_ = cur_time;
+    }
+}  
+
+// 监测队列的缓存情况
+void RtspPusher::checkPacketQueueDuration()
+{
+    // Step 1: 获取队列状态
+    PacketQueueStats stats;
+    queue_->GetStats(&stats);
+
+    // Step 2: 判断队列持续时间是否超过最大值
+    if(stats.audio_duration > max_queue_duration_ || stats.video_duration > max_queue_duration_) {
+        // Step 3: 通知消息队列
+        msg_queue_->notify_msg3(MSG_RTSP_QUEUE_DURATION, stats.audio_duration, stats.video_duration);
+        // Step 4: 打印警告信息
+        LogWarn("drop packet -> a:%lld, v:%lld, th:%d", stats.audio_duration, stats.video_duration, max_queue_duration_);
+        // Step 5: 丢弃部分数据包
+        queue_->Drop(false, max_queue_duration_);
+    }
+}
+
 
 int RtspPusher::sendPacket(AVPacket *pkt, MediaType media_type)
 {
@@ -269,6 +316,7 @@ int RtspPusher::sendPacket(AVPacket *pkt, MediaType media_type)
 
     int ret = av_write_frame(fmt_ctx_, pkt);
     if(ret < 0) {
+        msg_queue_->notify_msg2(MSG_RTSP_ERROR, ret);
         char str_error[512] = {0};
         av_strerror(ret, str_error, sizeof(str_error) -1);
         LogError("av_opt_set failed:%s", str_error);

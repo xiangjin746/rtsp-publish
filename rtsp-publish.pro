@@ -40,4 +40,5 @@ HEADERS += \
     aacencoder.h \
     h264encoder.h \
     packetqueue.h \
-    rtsppusher.h
+    rtsppusher.h \
+    messagequeue.h

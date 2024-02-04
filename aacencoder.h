@@ -45,6 +45,9 @@ public:
     virtual int GetFrameSamples() {      // 采样点数量，只是说的一个通道
         return ctx_->frame_size;
     }
+    virtual int GetFrameSampleRate() {      // 采样率
+        return ctx_->sample_rate;
+    }
     // 一帧占用的字节数
     virtual int GetFrameBytes() {
         return av_get_bytes_per_sample(ctx_->sample_fmt) * ctx_->channels * ctx_->frame_size;

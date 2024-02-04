@@ -88,15 +88,25 @@ public:
         mypkt->media_type = media_type;
         mypkt->packet = pkt;
         // 步骤 3: 根据媒体类型更新统计信息
-        if(media_type == E_AUDIO_TYPE) {
-            stats_.audio_nb_packets++;
+        if(E_AUDIO_TYPE == media_type) {
+            stats_.audio_nb_packets++;      // 包数量
             stats_.audio_size += pkt->size;
-            audio_front_pts_ = pkt->pts;
+            // 持续时长怎么统计，不是用pkt->duration
+            audio_back_pts_ = pkt->pts;
+            if(audio_first_packet) {
+                audio_first_packet  = 0;
+                audio_front_pts_ = pkt->pts;
+            }
         }
-        if(media_type == E_VIDEO_TYPE) {
-            stats_.video_nb_packets++;
+        if(E_VIDEO_TYPE == media_type) {
+            stats_.video_nb_packets++;      // 包数量
             stats_.video_size += pkt->size;
-            video_front_pts_  = pkt->pts;
+            // 持续时长怎么统计，不是用pkt->duration
+            video_back_pts_ = pkt->pts;
+            if(video_first_packet) {
+                video_first_packet  = 0;
+                video_front_pts_ = pkt->pts;
+            }
         }
 
         // 步骤 4: 将处理好的包加入队列
@@ -105,6 +115,7 @@ public:
     }
 
     //  数据包的出队操作 - Pop 和 PopWithTimeout 方法
+    // 返回值: -1 abort; 1 获取到消息
     int Pop(AVPacket **pkt,MediaType &media_type) {
         // 步骤 1: 参数检查和锁定互斥量
         if(!pkt) {
@@ -146,9 +157,10 @@ public:
         
         queue_.pop();
         free(mypkt);
-        return 0;
+        return 1;
     }
 
+    // 返回值: -1 abort;  0  没有消息； 1有消息
     int PopWithTimeout(AVPacket **pkt, MediaType &media_type, int timeout) {
         // 步骤 1: 如果超时时间为负数，则直接调用 Pop 函数
         if(timeout < 0) {
@@ -198,7 +210,7 @@ public:
         queue_.pop();
         free(mypkt);
 
-        return 0;
+        return 1;
     }
 
     bool Empty() {
@@ -266,6 +278,8 @@ public:
         if(duration < 0     // pts回绕
                 || duration > audio_frame_duration_ * stats_.audio_nb_packets * 2) {
             duration =  audio_frame_duration_ * stats_.audio_nb_packets;
+        } else {
+            duration += audio_frame_duration_;
         }
         return duration;
     }
@@ -277,6 +291,8 @@ public:
         if(duration < 0     // pts回绕
                 || duration > video_frame_duration_ * stats_.video_nb_packets * 2) {
             duration =  video_frame_duration_ * stats_.video_nb_packets;
+        }else {
+            duration += video_frame_duration_;
         }
         return duration;
     }
@@ -303,12 +319,16 @@ public:
         if(audio_duration < 0     // pts回绕
                 || audio_duration > audio_frame_duration_ * stats_.audio_nb_packets * 2) {
             audio_duration =  audio_frame_duration_ * stats_.audio_nb_packets;
+        }else {
+            audio_duration += audio_frame_duration_;
         }
         int64_t video_duration = video_back_pts_ - video_front_pts_;  //以pts为准
         // 也参考帧（包）持续 *帧(包)数
         if(video_duration < 0     // pts回绕
                 || video_duration > video_frame_duration_ * stats_.video_nb_packets * 2) {
             video_duration =  video_frame_duration_ * stats_.video_nb_packets;
+        }else {
+            video_duration += video_frame_duration_;
         }
 
         stats->audio_duration   = audio_duration;
@@ -331,10 +351,12 @@ private:
     double audio_frame_duration_ = 23.21995649; // 默认23.2ms 44.1khz  1024*1000ms/44100=23.21995649ms
     double video_frame_duration_ = 40;  // 40ms 视频帧率为25的  ， 1000ms/25=40ms
     // pts记录
-    int64_t audio_front_pts_ = 0;
-    int64_t audio_back_pts_ = 0;
-    int64_t video_front_pts_ = 0;
-    int64_t video_back_pts_ = 0;
+    int64_t audio_front_pts_    = 0;
+    int64_t audio_back_pts_     = 0;
+    int     audio_first_packet  = 1;
+    int64_t video_front_pts_    = 0;
+    int64_t video_back_pts_     = 0;
+    int     video_first_packet  = 1;
 };
 
 

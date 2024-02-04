@@ -3,7 +3,8 @@
 #include "dlog.h"
 #include "avpublishtime.h"
 
-PushWork::PushWork()
+PushWork:: PushWork(MessageQueue *msg_queue):
+    msg_queue_(msg_queue)
 {
 
 }
@@ -162,14 +163,24 @@ RET_CODE PushWork::Init(const Properties &properties)
     }
 
     /*================================rtsp===============================================*/
-    rtsp_url_       = properties.GetProperty("rtsp_url", "");
-    rtsp_transport_ = properties.GetProperty("rtsp_transport", "");
-    rtsp_timeout_   = properties.GetProperty("rtsp_timeout",5000);
-    rtsp_pusher_    = new RtspPusher();
+    rtsp_url_                   = properties.GetProperty("rtsp_url", "");
+    rtsp_transport_             = properties.GetProperty("rtsp_transport", "");
+    rtsp_timeout_               = properties.GetProperty("rtsp_timeout",5000);
+    rtsp_max_queue_duration_    = properties.GetProperty("rtsp_max_queue_duration",1000);
+    rtsp_pusher_                = new RtspPusher(msg_queue_);
     Properties rtsp_properties;
     rtsp_properties.SetProperty("rtsp_url",rtsp_url_);
     rtsp_properties.SetProperty("rtsp_transport",rtsp_transport_);
     rtsp_properties.SetProperty("rtsp_timeout",rtsp_timeout_);
+     rtsp_properties.SetProperty("max_queue_duration", rtsp_max_queue_duration_);
+    if(audio_encoder_) {
+        rtsp_properties.SetProperty("audio_frame_duration",
+                                    audio_encoder_->GetFrameSamples()*1000/audio_encoder_->GetFrameSampleRate());
+    }
+    if(video_encoder_) {
+        rtsp_properties.SetProperty("video_frame_duration",
+                                    1000/video_encoder_->GetFps());
+    }
     if(rtsp_pusher_->Init(rtsp_properties) != RET_OK)
     {
         LogError("rtsp_pusher_ Init failed");
@@ -336,7 +347,7 @@ void PushWork::PcmCallback(uint8_t *pcm, int32_t size)
     // 6 处理结束与日志记录
     // LogInfo("PcmCallback pts:%ld", pts);
     if(packet) {
-        LogInfo("PcmCallback packet->pts:%ld", packet->pts);
+        // LogInfo("PcmCallback packet->pts:%ld", packet->pts);
         // av_packet_free(&packet);
         rtsp_pusher_->Push(packet,E_AUDIO_TYPE);
     } else {
@@ -349,7 +360,7 @@ void PushWork::YuvCallback(uint8_t *yuv, int32_t size)
 {
     
     // 步骤1.1: 获取当前音频的演示时间戳（PTS）
-    int64_t pts = (int64_t)AVPublishTime::GetInstance()->get_audio_pts();
+    int64_t pts = (int64_t)AVPublishTime::GetInstance()->get_video_pts();
     // 步骤2.1: 初始化编码过程中需要的变量
     int pkt_frame = 0;
     RET_CODE encode_ret = RET_OK;
@@ -379,7 +390,7 @@ void PushWork::YuvCallback(uint8_t *yuv, int32_t size)
     // 步骤3.5: 记录日志并释放资源
     // LogInfo("size:%d", size);
     if(packet) {
-        LogInfo("YuvCallback packet->pts:%ld", packet->pts);
+        // LogInfo("YuvCallback packet->pts:%ld", packet->pts);
          rtsp_pusher_->Push(packet,E_VIDEO_TYPE);
     }else {
         LogInfo("packet is null");

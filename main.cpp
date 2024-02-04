@@ -1,7 +1,9 @@
 #include <iostream>
+#include <thread>
 #include "dlog.h"
 #include "pushwork.h"
-#include <thread>
+#include "messagequeue.h"
+
 using namespace std;
 
 extern "C" {
@@ -20,9 +22,14 @@ int main()
     cout << "Hello World!" << endl;
 
     init_logger("rtsp_push.log", S_INFO);
+    MessageQueue *msg_queue_ = new MessageQueue();
+    if(!msg_queue_) {
+        LogError("new MessageQueue() failed");
+        return -1;
+    }
 
     {
-        PushWork push_work;
+        PushWork push_work(msg_queue_);
         Properties properties;
 
         // 音频test模式
@@ -54,20 +61,40 @@ int main()
         properties.SetProperty("rtsp_url", RTSP_URL);
         properties.SetProperty("rtsp_transport", "udp");
         properties.SetProperty("rtsp_timeout", 10000);
+        properties.SetProperty("rtsp_max_queue_duration", 1000);
         if(push_work.Init(properties) != RET_OK) {
             LogError("PushWork init failed");
             return -1;
         }
 
         int count = 0;
+        AVMessage msg;
+        int ret = 0;
         while (true) {
-            LogInfo("%d",count);
-            std::this_thread::sleep_for(std::chrono::milliseconds(1000));
-            if(count++ > 10)
+            // std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+            ret = msg_queue_->msg_queue_get(&msg, 1000);
+            if(1 == ret) {
+                switch (msg.what) {
+                case MSG_RTSP_ERROR:
+                    LogError("MSG_RTSP_ERROR error:%d", msg.arg1);
+                    break;
+                case MSG_RTSP_QUEUE_DURATION:
+                    LogError("MSG_RTSP_QUEUE_DURATION a:%d, v:%d", msg.arg1, msg.arg2);
+                    break;
+                default:
+                    break;
+                }
+            }
+            LogInfo("count:%d, ret:%d", count, ret);
+            
+            if(count++ > 100)
                 break;
         }
+        msg_queue_->msg_queue_abort();
 
     }
+    delete msg_queue_;
+
     LogInfo("main finish!");
     return 0;
 }

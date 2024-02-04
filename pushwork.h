@@ -7,6 +7,7 @@
 #include "aacencoder.h"
 #include "h264encoder.h"
 #include "rtsppusher.h"
+#include "messagequeue.h"
 
 extern "C" {
 #include <libavcodec/avcodec.h>
@@ -18,7 +19,7 @@ extern "C" {
 class PushWork
 {
 public:
-    PushWork();
+    PushWork(MessageQueue *msg_queue);
     ~PushWork();
     RET_CODE Init(const Properties &properties);
     RET_CODE DeInit();
@@ -81,7 +82,9 @@ private:
     std::string rtsp_url_;
     std::string rtsp_transport_ = "";
     int rtsp_timeout_ = 5000;
+    int rtsp_max_queue_duration_ = 1000;
     RtspPusher *rtsp_pusher_ = NULL;
+    MessageQueue *msg_queue_ = NULL;
 
 };
 

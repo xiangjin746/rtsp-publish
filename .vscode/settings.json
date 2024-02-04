@@ -49,7 +49,8 @@
         "mutex": "cpp",
         "condition_variable": "cpp",
         "deque": "cpp",
-        "queue": "cpp"
+        "queue": "cpp",
+        "list": "cpp"
     },
     "C_Cpp.errorSquiggles": "disabled"
 }
